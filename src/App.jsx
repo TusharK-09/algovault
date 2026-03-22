@@ -516,6 +516,7 @@ export default function AlgoVault() {
   const [done,setDone]=useState({}); const [inProgress,setInProgress]=useState({});
   const [notes,setNotes]=useState({}); const [streak,setStreak]=useState(EMPTY_STREAK);
   const [adsDone,setAdsDone]=useState({}); const [bankDone,setBankDone]=useState({});
+  const [learnDone,setLearnDone]=useState({});
   // Placement state  
   const [applications,setApplications]=useState([]); // MY personal log
   const [dayStatus,setDayStatus]=useState({});
