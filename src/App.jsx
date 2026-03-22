@@ -520,6 +520,8 @@ export default function AlgoVault() {
   // Placement state  
   const [applications,setApplications]=useState([]); // MY personal log
   const [dayStatus,setDayStatus]=useState({});
+  const [todayLog,setTodayLog]=useState({text:'',done:false,date:''});
+  const [logDraft,setLogDraft]=useState('');
   // UI state
   const [page,setPage]=useState("home");
   const [planTab,setPlanTab]=useState("drives"); // "drives" | "mylog"
@@ -554,6 +556,16 @@ export default function AlgoVault() {
         setAdsDone(data.ads_done||{}); setDayStatus(data.day_status||{});
         setApplications(data.applications||[]);
         setLearnDone(data.learn_done||{});
+        const savedLog = data.today_log||{text:'',done:false,date:''};
+        // Reset if it's a new day
+        const today_ = new Date().toDateString();
+        if(savedLog.date !== today_) {
+          setTodayLog({text:'',done:false,date:today_});
+          setLogDraft('');
+        } else {
+          setTodayLog(savedLog);
+          setLogDraft(savedLog.text||'');
+        }
         if(data.bank_done){setBankDone(data.bank_done);}
         else{const init={};BANK.forEach(q=>{if(q.init)init[q.id]=true;});setBankDone(init);}
       } else {
@@ -570,7 +582,7 @@ export default function AlgoVault() {
       setSyncing(true);
       await supabase.from("progress").upsert({
         user_id:user.id,done:d,in_progress:ip,notes:n,streak:s,
-        ads_done:ad,bank_done:bd,day_status:ds,applications:apps,learn_done:ld,
+        ads_done:ad,bank_done:bd,day_status:ds,applications:apps,learn_done:ld,today_log:todayLog,
         updated_at:new Date().toISOString(),
       },{onConflict:"user_id"});
       setSyncing(false);setLastSaved(new Date());
@@ -602,6 +614,22 @@ export default function AlgoVault() {
   const markProg=(id)=>{const np={...inProgress,[id]:!inProgress[id]};setInProgress(np);persist(done,np,notes,streak,adsDone,bankDone,dayStatus,applications,learnDone);};
   const markAdsDone=(id)=>{const na={...adsDone,[id]:!adsDone[id]};setAdsDone(na);persist(done,inProgress,notes,streak,na,bankDone,dayStatus,applications,learnDone);};
   const markBankDone=(id)=>{const nb={...bankDone,[id]:!bankDone[id]};setBankDone(nb);persist(done,inProgress,notes,streak,adsDone,nb,dayStatus,applications,learnDone);};
+  const saveLog = (text, isDoneFlag) => {
+    const newLog = {text, done: isDoneFlag, date: new Date().toDateString()};
+    setTodayLog(newLog);
+    if(!user) return;
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(async() => {
+      setSyncing(true);
+      await supabase.from('progress').upsert({
+        user_id: user.id, done, in_progress: inProgress, notes, streak,
+        ads_done: adsDone, bank_done: bankDone, day_status: dayStatus,
+        applications, learn_done: learnDone, today_log: newLog,
+        updated_at: new Date().toISOString(),
+      }, {onConflict: 'user_id'});
+      setSyncing(false); setLastSaved(new Date());
+    }, 600);
+  };
   const setDayStat=(date,st)=>{const nd={...dayStatus,[date]:st};setDayStatus(nd);persist(done,inProgress,notes,streak,adsDone,bankDone,nd,applications,learnDone);};
   const openNote=(id)=>{setNoteOpen(id);setNoteText(notes[id]||"");};
   const saveNote=()=>{if(!noteOpen)return;const nn={...notes,[noteOpen]:noteText};setNotes(nn);persist(done,inProgress,nn,streak,adsDone,bankDone,dayStatus,applications,learnDone);setNoteOpen(null);};
@@ -785,6 +813,39 @@ export default function AlgoVault() {
                 </div>
               ))}
             </div>
+
+            {/* TODAY'S LOG */}
+            <div className="card" style={{border: todayLog.done ? "1px solid #a7f3d0" : "1px solid #e8e5e0", background: todayLog.done ? "#f0fdf4" : "#fff"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+                <div style={{fontWeight:700,fontSize:13,color: todayLog.done?"#059669":"#1c1c1c"}}>
+                  📝 Today's Plan {todayLog.done && "✅"}
+                </div>
+                <div style={{fontSize:10,color:"#bbb"}}>{new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'short'})}</div>
+              </div>
+              <textarea
+                value={logDraft}
+                onChange={e=>{setLogDraft(e.target.value);}}
+                onBlur={e=>saveLog(e.target.value, todayLog.done)}
+                placeholder={"Write today's 3 tasks here...\n\n1. LC 704 Binary Search + LC 35 Search Insert\n2. ADS: Prefix Sum problems\n3. Apply to Razorpay on LinkedIn"}
+                style={{width:"100%",minHeight:100,border:"1.5px solid #e8e5e0",borderRadius:8,padding:"10px 12px",fontSize:12,fontFamily:"'DM Sans',sans-serif",resize:"vertical",outline:"none",lineHeight:1.7,color:"#333",background: todayLog.done?"#f0fdf4":"#fafaf9"}}
+              />
+              <div style={{display:"flex",gap:8,marginTop:8,justifyContent:"space-between",alignItems:"center"}}>
+                <div style={{fontSize:11,color:"#bbb"}}>Auto-saves on click away · Resets each new day</div>
+                <div style={{display:"flex",gap:6}}>
+                  <button
+                    onClick={()=>saveLog(logDraft, false)}
+                    style={{padding:"5px 12px",background:"transparent",border:"1.5px solid #e8e5e0",borderRadius:7,fontSize:11,cursor:"pointer",fontFamily:"'DM Sans'",color:"#555"}}>
+                    Save
+                  </button>
+                  <button
+                    onClick={()=>saveLog(logDraft, !todayLog.done)}
+                    style={{padding:"5px 12px",background:todayLog.done?"#dc2626":"#059669",border:"none",borderRadius:7,fontSize:11,cursor:"pointer",fontFamily:"'DM Sans'",color:"#fff",fontWeight:600}}>
+                    {todayLog.done ? "Unmark Done" : "✅ Mark Day Done"}
+                  </button>
+                </div>
+              </div>
+            </div>
+
             <div className="card">
               <div style={{fontWeight:600,fontSize:13,marginBottom:12,display:"flex",justifyContent:"space-between"}}>
                 <span>📋 My Application Pipeline</span>
